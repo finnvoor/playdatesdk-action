@@ -1,0 +1,63 @@
+name: 'Install Playdate SDK'
+description: 'Automatically install the Playdate SDK.'
+branding:
+  icon: 'download'
+  color: 'yellow'
+inputs:
+  version:
+    default: latest
+    description: 'SDK version (default: `latest`)'
+    required: false
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run gtar as root
+      if: ${{ runner.os == 'macOS' }}
+      shell: bash
+      run: sudo chown root /opt/homebrew/bin/gtar && sudo chmod u+s /opt/homebrew/bin/gtar
+    - name: Get Playdate SDK version
+      shell: bash
+      id: playdate-version
+      run: |
+        EXT="${{ (runner.os == 'macOS' && 'zip') || 'tar.gz' }}"
+        OS_PATH="${{ (runner.os == 'Linux' && '/Linux') || '' }}"
+        URL=$(curl -Ls -o /dev/null -w %{url_effective} --head "https://download.panic.com/playdate_sdk${OS_PATH}/PlaydateSDK-${{ inputs.version }}.${EXT}")
+        echo "name=$(echo $URL | awk -F '/' '{print $(NF)}' | awk -F '.' '{OFS="."; print $1,$2,$3}')" >> $GITHUB_OUTPUT
+        echo "url=$URL" >> $GITHUB_OUTPUT
+        echo "ext=$EXT" >> $GITHUB_OUTPUT
+    - name: Restore Cached Playdate SDK
+      uses: actions/cache/restore@v4
+      id: cache-playdate
+      with:
+        path: PlaydateSDK.${{ steps.playdate-version.outputs.ext }}
+        key: ${{ steps.playdate-version.outputs.name }}
+    - name: Download Playdate SDK
+      if: ${{ steps.cache-playdate.outputs.cache-hit != 'true' }}
+      shell: bash
+      run: |
+        curl -L -sS --show-error --fail ${{ steps.playdate-version.outputs.url }} -o PlaydateSDK.${{ steps.playdate-version.outputs.ext }}
+    - name: Cache Playdate SDK
+      if: ${{ steps.cache-playdate.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@v4
+      with:
+        path: PlaydateSDK.${{ steps.playdate-version.outputs.ext }}
+        key: ${{ steps.playdate-version.outputs.name }}
+    - name: Install Playdate SDK (macOS)
+      if: ${{ runner.os == 'macOS' }}
+      shell: bash
+      run: |
+        unzip PlaydateSDK.${{ steps.playdate-version.outputs.ext }}
+        sudo installer -pkg "PlaydateSDK.pkg" -target /
+        rm -rf PlaydateSDK.zip
+        rm -rf PlaydateSDK.pkg
+    - name: Install Playdate SDK (Linux)
+      if: ${{ runner.os == 'Linux' }}
+      shell: bash
+      run: |
+        mkdir -p ~/.local/share/playdate-sdk/
+        tar -xzf PlaydateSDK.tar.gz -C ~/.local/share/playdate-sdk/ --strip-components=1
+        sudo ~/.local/share/playdate-sdk/setup.sh
+        echo "PLAYDATE_SDK_PATH=$HOME/.local/share/playdate-sdk" >> $GITHUB_ENV
+        echo "~/.local/share/playdate-sdk/bin" >> $GITHUB_PATH
+        rm -rf PlaydateSDK.tar.gz

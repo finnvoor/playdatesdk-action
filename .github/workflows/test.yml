@@ -1,0 +1,27 @@
+name: 'Test'
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os:
+          - macos-latest
+          - ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: finnvoor/playdatesdk-action@main
+      - run: pdc --version
+      - if: ${{ runner.os == 'Linux' }}
+        run: ls $PLAYDATE_SDK_PATH/C_API
